@@ -1,101 +1,90 @@
-from fasthtml.common import *
-import asyncio
-import sys
+import pygame
+import numpy as np
 
-if __name__ == "__main__": sys.exit("Run this app with `uvicorn main:app`")
+pygame.init()
 
-css = Style('''
-    body, html { height: 100%; margin: 0; }
-    body { display: flex; flex-direction: column; }
-    main { flex: 1 0 auto; }
-    footer { flex-shrink: 0; padding: 10px; text-align: center; background-color: #333; color: white; }
-    footer a { color: #9cf; }
-    #grid { display: grid; grid-template-columns: repeat(20, 20px); grid-template-rows: repeat(20, 20px);gap: 1px; }
-    .cell { width: 20px; height: 20px; border: 1px solid black; }
-    .alive { background-color: green; }
-    .dead { background-color: white; }
-''')
-gridlink = Link(rel="stylesheet", href="https://cdnjs.cloudflare.com/ajax/libs/flexboxgrid/6.3.1/flexboxgrid.min.css", type="text/css")
-htmx_ws = Script(src="https://unpkg.com/htmx-ext-ws@2.0.0/ws.js")
-app = FastHTML(hdrs=(picolink, gridlink, css, htmx_ws))
-rt = app.route
+width, height = 800, 600
+screen = pygame.display.set_mode((width, height))
+pygame.display.set_caption("SebDaBaBo's Game of Life")
 
-game_state = {'running': False, 'grid': [[0 for _ in range(20)] for _ in range(20)]}
-def update_grid(grid: list[list[int]]) -> list[list[int]]:
-    new_grid = [[0 for _ in range(20)] for _ in range(20)]
-    def count_neighbors(x, y):
-        directions = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
-        count = 0
-        for dx, dy in directions:
-            nx, ny = x + dx, y + dy
-            if 0 <= nx < len(grid) and 0 <= ny < len(grid[0]): count += grid[nx][ny]
-        return count
-    for i in range(len(grid)):
-        for j in range(len(grid[0])):
-            neighbors = count_neighbors(i, j)
-            if grid[i][j] == 1:
-                if neighbors < 2 or neighbors > 3: new_grid[i][j] = 0
-                else: new_grid[i][j] = 1
-            elif neighbors == 3: new_grid[i][j] = 1
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+GRAY = (200, 200, 200)
+RED = (255, 0, 0)
+GREEN = (0, 255, 0)
+
+cell_size = 10
+
+n_cells_x = width // cell_size
+n_cells_y = (height - 50) // cell_size
+
+grid = np.zeros((n_cells_x, n_cells_y))
+
+button_width = 100
+button_height = 40
+start_button = pygame.Rect(width // 3 - button_width // 2, height - 45, button_width, button_height)
+reset_button = pygame.Rect(2 * width // 3 - button_width // 2, height - 45, button_width, button_height)
+
+font = pygame.font.Font(None, 36)
+
+def update(frame):
+    new_grid = grid.copy()
+    for x in range(n_cells_x):
+        for y in range(n_cells_y):
+            n_neighbors = grid[(x-1)%n_cells_x, (y-1)%n_cells_y] + \
+                          grid[(x)%n_cells_x, (y-1)%n_cells_y] + \
+                          grid[(x+1)%n_cells_x, (y-1)%n_cells_y] + \
+                          grid[(x-1)%n_cells_x, (y)%n_cells_y] + \
+                          grid[(x+1)%n_cells_x, (y)%n_cells_y] + \
+                          grid[(x-1)%n_cells_x, (y+1)%n_cells_y] + \
+                          grid[(x)%n_cells_x, (y+1)%n_cells_y] + \
+                          grid[(x+1)%n_cells_x, (y+1)%n_cells_y]
+            
+            if grid[x, y] == 1:
+                if n_neighbors < 2 or n_neighbors > 3:
+                    new_grid[x, y] = 0
+            else:
+                if n_neighbors == 3:
+                    new_grid[x, y] = 1
     return new_grid
 
-def Grid():
-    cells = []
-    for y, row in enumerate(game_state['grid']):
-        for x, cell in enumerate(row):
-            cell_class = 'alive' if cell else 'dead'
-            cell = Div(cls=f'cell {cell_class}', hx_put='/update', hx_vals={'x': x, 'y': y}, hx_swap='none', hx_target='#gol', hx_trigger='click')
-            cells.append(cell)
-    return Div(*cells, id='grid')
+running = True
+simulating = False
+clock = pygame.time.Clock()
 
-def Home():
-    gol = Div(Grid(), id='gol', cls='row center-xs')
-    run_btn = Button('Run', id='run', cls='col-xs-2', hx_put='/run', hx_target='#gol', hx_swap='none')
-    pause_btn = Button('Pause', id='pause', cls='col-xs-2', hx_put='/pause', hx_target='#gol', hx_swap='none')
-    reset_btn = Button('Reset', id='reset', cls='col-xs-2', hx_put='/reset', hx_target='#gol', hx_swap='none')
-    main = Main(gol, Div(run_btn, pause_btn, reset_btn, cls='row center-xs'), hx_ext="ws", ws_connect="/gol")
-    return Title('Game of Life'), main
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            x, y = pygame.mouse.get_pos()
+            if y < height - 50:
+                grid[x // cell_size, y // cell_size] = 1
+            elif start_button.collidepoint(event.pos):
+                simulating = not simulating
+            elif reset_button.collidepoint(event.pos):
+                grid = np.zeros((n_cells_x, n_cells_y))
+                simulating = False
 
-@rt('/')
-def get(): return Home()
+    screen.fill(BLACK)
 
-player_queue = []
-async def update_players():
-    for i, player in enumerate(player_queue):
-        try: await player(Grid())
-        except: player_queue.pop(i)
-async def on_connect(send): player_queue.append(send)
-async def on_disconnect(send): await update_players()
+    for x in range(n_cells_x):
+        for y in range(n_cells_y):
+            if grid[x, y] == 1:
+                pygame.draw.rect(screen, WHITE, (x*cell_size, y*cell_size, cell_size-1, cell_size-1))
 
-@app.ws('/gol', conn=on_connect, disconn=on_disconnect)
-async def ws(msg:str, send): pass
+    pygame.draw.rect(screen, GREEN if simulating else RED, start_button)
+    pygame.draw.rect(screen, GRAY, reset_button)
+    
+    start_text = font.render("Stop" if simulating else "Start", True, BLACK)
+    reset_text = font.render("Reset", True, BLACK)
+    screen.blit(start_text, (start_button.x + 20, start_button.y + 10))
+    screen.blit(reset_text, (reset_button.x + 20, reset_button.y + 10))
 
-async def background_task():
-    while True:
-        if game_state['running'] and len(player_queue) > 0:
-            game_state['grid'] = update_grid(game_state['grid'])
-            await update_players()
-        await asyncio.sleep(1.0)
+    if simulating:
+        grid = update(grid)
 
-background_task_coroutine = asyncio.create_task(background_task())
+    pygame.display.flip()
+    clock.tick(10)
 
-@rt('/update')
-async def put(x: int, y: int):
-    game_state['grid'][y][x] = 1 if game_state['grid'][y][x] == 0 else 0
-    await update_players()
-
-@rt('/run')
-async def put():
-    game_state['running'] = True
-    await update_players()
-
-@rt("/reset")
-async def put():
-    game_state['grid'] = [[0 for _ in range(20)] for _ in range(20)]
-    game_state['running'] = False
-    await update_players()
-
-@rt('/pause')
-async def put():
-    game_state['running'] = False
-    await update_players()
+pygame.quit()
