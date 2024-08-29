@@ -47,3 +47,9 @@ SebDaBaBo's Game of Life is an implementation of Conway's Game of Life using Pyt
 1. **Any live cell with two or three live neighbors survives.**
 2. **Any dead cell with three live neighbors becomes a live cell.**
 3. **All other live cells die in the next generation. Similarly, all other dead cells stay dead.**
+
+## Example Start
+![Game of Life ouput 1](https://github.com/user-attachments/assets/efa01c47-d0ce-47ce-b5a9-a1a7df9c2856)
+
+## Example Simulation End
+![Game of Life output 2](https://github.com/user-attachments/assets/2b060789-ab17-4c69-8a6c-5ef435a538f0)
