@@ -22,7 +22,7 @@ SebDaBaBo's Game of Life is an implementation of Conway's Game of Life using Pyt
 
 2. **Install Pygame**:
     ```bash
-    pip install pygame
+    pip install -r requirements.txt
     ```
 
 3. **Run the Application**:
